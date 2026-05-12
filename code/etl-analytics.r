@@ -1,4 +1,3 @@
-
 rm(list=ls(all=TRUE))
 graphics.off()
 cat("\014")
@@ -12,6 +11,8 @@ library(mlr)
 library(naniar)
 library(dplyr)
 library(tidyr)
+library(scales)
+
 
 
 
@@ -71,8 +72,6 @@ contar_valores <- function(data, variable, valores) {
 }
 
 # Valores que son faltantes o no informativos
-
-
 
 
 
@@ -240,8 +239,7 @@ df_auditoria <- df_limpio %>%
       make_date(arrival_date_year, arrival_month_num, arrival_date_day_of_month)
     ),
     
-    # Fecha aproximada de creación de la reserva
-    # Según documentación: lead_time = arrival_date - fecha de ingreso al PMS
+    # Fecha aproximada de creación de la reserva,s egún documentación: lead_time = arrival_date - fecha de ingreso al PMS
     booking_date_estimada = arrival_date - lead_time,
     
     # Variables auxiliares
@@ -275,8 +273,7 @@ df_auditoria <- df_limpio %>%
       !is.na(arrival_date_day_of_month) &
       !between(arrival_date_day_of_month, 1, 31),
     
-    # Fecha de llegada inválida
-    # Solo se marca como inválida si las partes existen pero forman una fecha imposible.
+    # Fecha de llegada inválida, solo se marca como inválida si las partes existen pero forman una fecha imposible.
     flag_fecha_llegada_invalida =
       !is.na(arrival_date_year) &
       !is.na(arrival_month_num) &
@@ -1069,249 +1066,189 @@ names(df_outliers_tratado)
 
 write.csv(df_outliers_tratado, "hotel_bookings_outliers_tratado.csv", row.names = FALSE)
 
-
-vars_winsor <- c(
-  "adr",
-  "lead_time",
-  "stays_in_week_nights",
-  "stays_in_weekend_nights"
-)
-
-#=======================================================
+#====================ANÁLISIS Y VISUALIZACIÓN DE DATOS=========================
 
 
-datos_originales <- df_outliers_tratado %>%
-  select(all_of(vars_winsor)) %>%
-  pivot_longer(
-    cols = everything(),
-    names_to = "variable",
-    values_to = "valor"
-  ) %>%
-  mutate(version = "Original")
+df_no_cancelados <- subset(df_outliers_tratado, is_canceled == "0" | is_canceled == 0)
 
-datos_winsor <- df_outliers_tratado %>%
-  select(all_of(paste0(vars_winsor, "_win"))) %>%
-  rename(
-    adr = adr_win,
-    lead_time = lead_time_win,
-    stays_in_week_nights = stays_in_week_nights_win,
-    stays_in_weekend_nights = stays_in_weekend_nights_win
-  ) %>%
-  pivot_longer(
-    cols = everything(),
-    names_to = "variable",
-    values_to = "valor"
-  ) %>%
-  mutate(version = "Winsorizado")
-
-datos_comparacion <- bind_rows(datos_originales, datos_winsor)
-
-
-
-#Boxplot antes y después
-ggplot(datos_comparacion, aes(x = version, y = valor)) +
-  geom_boxplot(outlier.colour = "red", outlier.alpha = 0.4) +
-  facet_wrap(~ variable, scales = "free", ncol = 2) +
-  labs(
-    title = "Comparación antes y después del tratamiento de outliers",
-    subtitle = "Winsorización aplicada al percentil 1% y 99%",
-    x = "Versión de la variable",
-    y = "Valor"
-  ) +
+ggplot(df_no_cancelados, aes(x = hotel, fill = hotel)) +
+  geom_bar() +
+  labs(title = "Reservas No Canceladas por Tipo de Hotel",
+       x = "Tipo de Hotel",
+       y = "Cantidad de Reservas") +
   theme_minimal()
 
 
-#HIstrograma antes y después
-ggplot(datos_comparacion, aes(x = valor)) +
-  geom_histogram(bins = 40, color = "white") +
-  facet_grid(variable ~ version, scales = "free") +
-  labs(
-    title = "Distribución antes y después de la winsorización",
-    subtitle = "Comparación visual de la concentración y reducción de valores extremos",
-    x = "Valor",
-    y = "Frecuencia"
-  ) +
-  theme_minimal()
+fechasJuntas <- df_outliers_tratado %>%
+  filter(is_canceled == 0) %>%
+  mutate(month_num = match(arrival_date_month, month.name),
+         full_date = make_date(year = arrival_date_year, 
+                               month = month_num, 
+                               day = arrival_date_day_of_month),
+         mes_abbr = month.abb[month_num],
+         año = as.factor(arrival_date_year)) %>%
+  count(año, mes_abbr, .drop = FALSE) %>%
+  mutate(mes_abbr = factor(mes_abbr, levels = month.abb),
+         fecha_orden = make_date(year = as.numeric(as.character(año)), 
+                                 month = match(mes_abbr, month.abb), 
+                                 day = 1)) %>%
+  arrange(fecha_orden) %>%
+  mutate(mes_año = paste(mes_abbr, año),
+         mes_año = factor(mes_año, levels = unique(mes_año)))
 
-
-
-#Comparación de máximos antes y después
-
-comparacion_maximos <- data.frame(
-  variable = vars_winsor,
-  Original = sapply(vars_winsor, function(v) max(df_outliers_tratado[[v]], na.rm = TRUE)),
-  Winsorizado = sapply(vars_winsor, function(v) max(df_outliers_tratado[[paste0(v, "_win")]], na.rm = TRUE))
-) %>%
-  pivot_longer(
-    cols = c(Original, Winsorizado),
-    names_to = "version",
-    values_to = "maximo"
-  )
-
-ggplot(comparacion_maximos, aes(x = variable, y = maximo, fill = version)) +
-  geom_col(position = "dodge") +
-  geom_text(
-    aes(label = round(maximo, 2)),
-    position = position_dodge(width = 0.9),
-    vjust = -0.3,
-    size = 3.5
-  ) +
-  labs(
-    title = "Reducción de valores máximos después de la winsorización",
-    subtitle = "Los valores extremos se limitaron sin eliminar registros",
-    x = "Variable",
-    y = "Valor máximo",
-    fill = "Versión"
-  ) +
-  theme_minimal()
-
-
-
-
-#Comparación de medias antes y después
-comparacion_medias <- data.frame(
-  variable = vars_winsor,
-  Original = sapply(vars_winsor, function(v) mean(df_outliers_tratado[[v]], na.rm = TRUE)),
-  Winsorizado = sapply(vars_winsor, function(v) mean(df_outliers_tratado[[paste0(v, "_win")]], na.rm = TRUE))
-) %>%
-  pivot_longer(
-    cols = c(Original, Winsorizado),
-    names_to = "version",
-    values_to = "media"
-  )
-
-ggplot(comparacion_medias, aes(x = variable, y = media, fill = version)) +
-  geom_col(position = "dodge") +
-  geom_text(
-    aes(label = round(media, 2)),
-    position = position_dodge(width = 0.9),
-    vjust = -0.3,
-    size = 3.5
-  ) +
-  labs(
-    title = "Comparación de medias antes y después de la winsorización",
-    subtitle = "La media se estabiliza sin modificar la estructura central de los datos",
-    x = "Variable",
-    y = "Media",
-    fill = "Versión"
-  ) +
-  theme_minimal()
-
-
-#Comparación de medianas antes y después
-comparacion_medianas <- data.frame(
-  variable = vars_winsor,
-  Original = sapply(vars_winsor, function(v) median(df_outliers_tratado[[v]], na.rm = TRUE)),
-  Winsorizado = sapply(vars_winsor, function(v) median(df_outliers_tratado[[paste0(v, "_win")]], na.rm = TRUE))
-) %>%
-  pivot_longer(
-    cols = c(Original, Winsorizado),
-    names_to = "version",
-    values_to = "mediana"
-  )
-
-ggplot(comparacion_medianas, aes(x = variable, y = mediana, fill = version)) +
-  geom_col(position = "dodge") +
-  geom_text(
-    aes(label = round(mediana, 2)),
-    position = position_dodge(width = 0.9),
-    vjust = -0.3,
-    size = 3.5
-  ) +
-  labs(
-    title = "Comparación de medianas antes y después de la winsorización",
-    subtitle = "La mediana se mantiene estable, indicando que el centro de la distribución no se alteró",
-    x = "Variable",
-    y = "Mediana",
-    fill = "Versión"
-  ) +
-  theme_minimal()
-
-
-#Valores editados
-valores_modificados <- data.frame(
-  variable = vars_winsor,
-  n_modificados = sapply(vars_winsor, function(v) {
-    sum(df_outliers_tratado[[v]] != df_outliers_tratado[[paste0(v, "_win")]], na.rm = TRUE)
-  })
-) %>%
-  mutate(
-    porcentaje = round(n_modificados / nrow(df_outliers_tratado) * 100, 2)
-  )
-
-ggplot(valores_modificados, aes(x = reorder(variable, n_modificados), y = n_modificados)) +
-  geom_col() +
-  coord_flip() +
-  geom_text(
-    aes(label = paste0(n_modificados, " (", porcentaje, "%)")),
-    hjust = -0.1,
-    size = 3.5
-  ) +
-  labs(
-    title = "Cantidad de valores modificados por winsorización",
-    subtitle = "Solo se ajustaron los valores ubicados en los extremos de la distribución",
-    x = "Variable",
-    y = "Número de valores modificados"
-  ) +
+ggplot(fechasJuntas, aes(x = mes_año, y = n, fill = año)) +
+  geom_col(width = 0.8) +  
+  scale_fill_brewer(palette = "Set2", name = "Año") +
+  labs(title = "Distribucion de reservas por mes y año",
+       x = "Mes - Año",
+       y = "Numero de reservas") +
   theme_minimal() +
-  ylim(0, max(valores_modificados$n_modificados) * 1.15)
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+        plot.title = element_text(size = 20, hjust = 0.5, vjust = 2, face = "bold"),
+        axis.title.y = element_text(vjust = 2),
+        axis.title.x = element_text(vjust = -1),
+        legend.position = "top")
+
+
+
+df_meses <- aggregate(hotel ~ arrival_date_month, data = df_outliers_tratado, FUN = length)
+
+colnames(df_meses)[2] <- "cantidad_reservas"
+
+meses_orden <- c("January", "February", "March", "April", "May", "June", 
+                 "July", "August", "September", "October", "November", "December")
+
+df_meses$arrival_date_month <- factor(df_meses$arrival_date_month, levels = meses_orden)
+
+df_meses$temporada <- ifelse(df_meses$arrival_date_month %in% c("July", "August"), "Alta",
+                             ifelse(df_meses$arrival_date_month %in% c("April", "May", "June", "September", "October"), "Media", "Baja"))
+
+df_meses$temporada <- factor(df_meses$temporada, levels = c("Alta", "Media", "Baja"))
+
+ggplot(df_meses, aes(x = arrival_date_month, y = cantidad_reservas, fill = temporada)) +
+  geom_col(color = "black", alpha = 0.8) +
+  scale_fill_manual(values = c("Alta" = "#e34a33", "Media" = "#fdbb84", "Baja" = "#fee8c8")) +
+  labs(title = "Cantidad de Reservas por Mes (Temporadas)",
+       x = "Mes",
+       y = "Cantidad de Reservas",
+       fill = "Temporada") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
 
 
-#Grafico resumen
-comparacion_resumen <- comparacion_winsor %>%
-  select(
-    variable,
-    max_original,
-    max_winsorizado,
-    media_original,
-    media_winsorizada,
-    mediana_original,
-    mediana_winsorizada
-  ) %>%
-  pivot_longer(
-    cols = -variable,
-    names_to = "metrica",
-    values_to = "valor"
-  ) %>%
-  separate(
-    metrica,
-    into = c("metrica", "version"),
-    sep = "_(?=[^_]+$)"
-  ) %>%
-  mutate(
-    version = ifelse(version == "original", "Original", "Winsorizado"),
-    metrica = recode(
-      metrica,
-      "max" = "Máximo",
-      "media" = "Media",
-      "mediana" = "Mediana"
-    )
-  )
 
-ggplot(comparacion_resumen, aes(x = version, y = valor, fill = version)) +
-  geom_col() +
-  geom_text(
-    aes(label = round(valor, 2)),
-    vjust = -0.3,
-    size = 3
-  ) +
-  facet_grid(metrica ~ variable, scales = "free_y") +
-  labs(
-    title = "Resumen del efecto de la winsorización",
-    subtitle = "Comparación de máximos, medias y medianas antes y después del tratamiento",
-    x = "Versión",
-    y = "Valor",
-    fill = "Versión"
-  ) +
+
+df_outliers_tratado$total_stay <- df_outliers_tratado$stays_in_weekend_nights + df_outliers_tratado$stays_in_week_nights
+
+ggplot(df_outliers_tratado, aes(x = total_stay, y = hotel, fill = hotel)) +
+  geom_boxplot(alpha = 0.7, outlier.color = "grey50", outlier.size = 1) +
+  stat_summary(fun = mean, geom = "point", shape = 18, size = 4, color = "darkred") +
+  scale_x_continuous(trans = "pseudo_log", breaks = c(0, 2, 5, 10, 15, 20, 30, 40, 60)) +
+  labs(title = "Distribución y Promedio de Estancias por Tipo de Hotel",
+       subtitle = "Escala pseudo-logarítmica (comprime estancias largas)",
+       x = "Días de Estancia Totales",
+       y = "Tipo de Hotel") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+
+
+
+
+# 1. Aseguramos tener la columna creada
+df_outliers_tratado$con_menores <- ifelse(df_outliers_tratado$children > 0 | df_outliers_tratado$babies > 0, 
+                                       "Con Niños/Bebés", "Solo Adultos")
+
+# 2. Calculamos los porcentajes exactos previamente (margin = 1 calcula por fila/hotel)
+df_prop <- as.data.frame(prop.table(table(df_outliers_tratado$hotel, df_outliers_tratado$con_menores), margin = 1))
+colnames(df_prop) <- c("hotel", "con_menores", "porcentaje")
+
+# 3. Generamos el gráfico combinado con las etiquetas de texto
+ggplot(df_prop, aes(x = porcentaje, y = hotel, fill = con_menores)) +
+  geom_col(color = "black", alpha = 0.8) +
+  geom_text(aes(label = percent(porcentaje, accuracy = 0.1)), 
+            position = position_stack(vjust = 0.5), size = 5, fontface = "bold") +
+  scale_x_continuous(labels = percent_format()) +
+  scale_fill_manual(values = c("Con Niños/Bebés" = "#FF9999", "Solo Adultos" = "#99CCFF")) +
+  labs(title = "Proporción de Reservas con Menores según Tipo de Hotel",
+       y = "Tipo de Hotel",
+       x = "Porcentaje del Total de Reservas",
+       fill = "Composición de la Reserva") +
+  theme_minimal()
+
+
+
+
+
+parking.data <- df_outliers_tratado %>%
+  filter(is_canceled == 0) %>%
+  count(required_car_parking_spaces) %>%
+  mutate(propor = n / sum(n) * 100,
+         tituloBarra = paste0(n, "\n(", round(propor, 2), "%)"))
+
+ggplot(parking.data, aes(x = as.factor(required_car_parking_spaces), y = n)) +
+  geom_bar(stat = "identity", fill = "dodgerblue4", color = "black", alpha = 0.7) +
+  coord_cartesian(ylim = c(0, 65000))+
+  geom_text(aes(label = tituloBarra), vjust = -0.5, size = 3.5) +
+  labs(title = "Distribucion de estacionamientos requeridos por reserva",
+       subtitle = "Solo reservas no canceladas*",
+       x = "Número de espacios de estacionamiento",
+       y = "Número de reservas") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 18, hjust = 0.5, vjust = 2),
+        plot.subtitle = element_text(size = 8, hjust = 0.5, vjust = 1,margin = margin(b = 20)),
+        axis.title.y = element_text(vjust = 2))
+
+
+
+
+cancelaciones.mes <- df_outliers_tratado %>%
+  filter(is_canceled == 1) %>%  # Solo cancelaciones
+  count(arrival_date_month) %>%
+  mutate(porcentaje = n / sum(n) * 100,
+         mes_ordenado = factor(arrival_date_month, levels = month.name))
+
+ggplot(cancelaciones.mes, aes(x = mes_ordenado, y = n)) +
+  geom_bar(stat = "identity", fill = "coral2", color = "black", alpha = 0.8) +
+  coord_cartesian(ylim = c(0, 4000))+
+  geom_text(aes(label = paste0(n, "\n(", round(porcentaje, 1), "%)")), 
+            vjust = -0.5, size = 3) +
+  labs(title = "Cancelaciones por mes",
+       subtitle = "Distribución de cancelaciones a lo largo del año",
+       x = "Mes",
+       y = "Número de cancelaciones") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 18, hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(size = 12, hjust = 0.5),
+        axis.title.y = element_text(vjust = 2))
+
+
+
+
+df_outliers_tratado$huesped_tipo <- ifelse(df_outliers_tratado$is_repeated_guest == 1, "Repetitivo", "Nuevo")
+
+ggplot(df_outliers_tratado, aes(x = total_stay, y = hotel, fill = huesped_tipo)) +
+  geom_boxplot(width = 0.7, alpha = 0.8, outlier.color = "grey60", outlier.size = 0.5) +
+  stat_summary(fun = mean, geom = "point", shape = 18, size = 4, color = "darkred", position = position_dodge(0.7)) +
+  scale_fill_manual(values = c("Nuevo" = "#85C1E9", "Repetitivo" = "#F5B041")) +
+  scale_x_continuous(trans = "pseudo_log", breaks = c(0, 2, 5, 10, 15, 20, 30, 40, 60)) +
+  labs(title = "Duración de Estadía: Huéspedes Nuevos vs. Repetitivos",
+       subtitle = "Escala pseudo-logarítmica (comprime estancias largas)",
+       x = "Días de Estancia Totales",
+       y = "Tipo de Hotel",
+       fill = "Tipo de Huésped") +
   theme_minimal() +
   theme(
-    axis.text.x = element_text(angle = 30, hjust = 1)
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 12, color = "grey40"),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 11),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 11)
   )
-
-
-
 
 
 
