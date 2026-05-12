@@ -1,5 +1,3 @@
-# 1ACC0216-TB1-2026-1
-Los datos a analizar consisten en las reservas hechas a 2 hoteles  (Resort hotel y City hotel). 
 # Hotel Booking Demand - Fundamentos de Data Science
 
 ## Objetivo del trabajo
@@ -23,14 +21,16 @@ Los datos abarcan desde el 1 de julio de 2015 hasta el 31 de agosto de 2017, e i
 
 *Nota: Para fines académicos, este conjunto original ha sido modificado incorporando ruido, valores nulos (NA) y datos atípicos (outliers) para aplicar técnicas de pre-procesamiento.*
 
-*El archivo PDF original con el enunciado y las reglas del trabajo se encuentra adjunto en este repositorio para mayor contexto.*
-
 ## Conclusiones
 
-- **Preferencia de establecimiento:** El City Hotel concentra la mayor demanda de reservas concretadas en comparación con el Resort Hotel, indicando un flujo constante orientado al turismo urbano y viajes de negocios.
-- **Estacionalidad de la demanda:** Se identificó una marcada temporada alta durante los meses de verano (julio y agosto). En contraparte, la temporada de invierno refleja los niveles más bajos de reservas, siendo enero el mes con menor ocupación.
-- **Patrones de estadía:** Los huéspedes del City Hotel mantienen estadías cortas con muy baja variabilidad. El Resort Hotel, por su naturaleza, registra tiempos de alojamiento significativamente más prolongados y dispersos.
-- **Perfil demográfico del huésped:** Más del 90% de las reservas históricas en ambos establecimientos pertenecen a viajes exclusivos de adultos. El turismo familiar con menores resulta ser un nicho minoritario que presenta proporciones muy similares tanto en el hotel de ciudad como en el resort.
+- **Preferencia de establecimiento:** Existe una marcada preferencia por el City Hotel frente al Resort Hotel entre las reservas no canceladas.
+- **Tendencia y estacionalidad:** La demanda aumentó con el paso del tiempo (tendencia creciente anual) y presenta un comportamiento estacional con picos a mediados de año y bajas a inicios y fines de año.
+- **Meses de mayor y menor flujo:** Julio y agosto concentran la mayor cantidad de reservas (temporada alta), mientras que enero y diciembre presentan la menor demanda (temporada baja).
+- **Variabilidad de estadía:** City Hotel concentra estadías cortas con baja variabilidad, mientras que Resort Hotel muestra estadías más largas y dispersas.
+- **Perfil del huésped:** Ambos hoteles tienen mayoría abrumadora de "Solo Adultos" (85-90%), pero Resort Hotel presenta una proporción ligeramente superior de reservas con menores.
+- **Requerimientos adicionales:** Aproximadamente 1 de cada 10 reservas requiere al menos un espacio de estacionamiento.
+- **Análisis de cancelaciones:** Agosto, julio y mayo (en orden descendente) son los meses con mayor número absoluto de cancelaciones, coincidiendo con los periodos de alta demanda.
+- **Fidelidad y duración:** Huéspedes repetitivos tienen estadías cortas; huéspedes nuevos tienen estadías más largas, especialmente en el Resort Hotel.
 
 ## Licencia
 Este proyecto ha sido desarrollado con fines estrictamente académicos para el curso 1ACC0216 - Fundamentos de Data Science en la Universidad Peruana de Ciencias Aplicadas (UPC). El contenido, código y análisis presentados en este repositorio son propiedad de los autores mencionados en la sección de participantes. Se permite su uso y consulta exclusivamente con fines educativos y de referencia, siempre que se otorgue el crédito correspondiente a los autores originales y a la institución académica.
